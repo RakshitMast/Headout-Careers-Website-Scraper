@@ -1,4 +1,4 @@
-# render.yaml
+# Example render.yaml for Selenium deployment
 
 # Specify the environment for the deployment
 environment:
