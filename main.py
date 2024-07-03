@@ -7,19 +7,22 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from bs4 import BeautifulSoup
+import stat
 
 # Function to fetch webpage content using Selenium
 def fetch_webpage(url):
-
-    
-    
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     
+    # Specify the path to the ChromeDriver
     chrome_driver_path = os.path.join(os.getcwd(), 'chromedriver.exe')
+    
+    # Set executable permissions for the ChromeDriver
+    os.chmod(chrome_driver_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+    
     service = Service(executable_path=chrome_driver_path)
     driver = webdriver.Chrome(service=service, options=options)
     driver.get(url)
