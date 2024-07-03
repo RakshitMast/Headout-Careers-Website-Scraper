@@ -18,7 +18,7 @@ def fetch_webpage(url):
     options.add_argument("--disable-dev-shm-usage")
     
     # Specify the path to the ChromeDriver
-    chrome_driver_path = os.path.join(os.getcwd(), 'chromedriver.exe')
+    chrome_driver_path = os.path.join(os.getcwd(), 'chromedriver')
     
     # Set executable permissions for the ChromeDriver
     os.chmod(chrome_driver_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
