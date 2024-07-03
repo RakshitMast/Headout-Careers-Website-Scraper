@@ -1,0 +1,31 @@
+# render.yaml
+
+# Specify the environment for the deployment
+environment:
+  python:
+    version: 3.11  # Replace with your preferred Python version
+
+# Specify the build commands
+build:
+  - pip install -r requirements.txt  # Install Python dependencies from requirements.txt
+  - sudo apt-get update  # Update package list (for Debian-based Linux environments)
+  - sudo apt-get install -y wget  # Install wget to download Chrome installer (optional)
+  - sudo wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb  # Download Chrome installer
+  - sudo apt install -y ./google-chrome-stable_current_amd64.deb  # Install Chrome from downloaded .deb file
+
+# Specify the start command
+start:
+  - python src/main.py  # Replace with your script's start command
+
+# Optional: Specify the services or configurations needed
+services:
+  - name: webdriver
+    install:
+      - apt-get update
+      - apt-get install -y chromium-browser  # Install Chromium as an alternative
+    path: /usr/bin/chromium-browser  # Example path for Chromium binary
+
+# Specify any environment variables if needed
+env:
+  - key: ENVIRONMENT
+    value: production
