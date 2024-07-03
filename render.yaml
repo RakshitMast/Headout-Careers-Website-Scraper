@@ -19,7 +19,7 @@ start:
 
 # Optional: Specify the services or configurations needed
 services:
-  - name: webdriver
+    name: webdriver
     install:
       - apt-get update
       - apt-get install -y chromium-browser  # Install Chromium as an alternative
@@ -27,5 +27,5 @@ services:
 
 # Specify any environment variables if needed
 env:
-  - key: ENVIRONMENT
+    key: ENVIRONMENT
     value: production
