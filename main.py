@@ -86,6 +86,7 @@ def fetch_job_titles(links):
     return job_data
 
 def main():
+    print("Hey i am running")
     url = "https://www.headout.com/careers/"
     filename = "New.txt"
 
