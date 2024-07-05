@@ -15,7 +15,7 @@ build:
 
 # Specify the start command
 start:
-  - python src/main.py  # Replace with your script's start command
+  - python main.py  # Replace with your script's start command
 
 # Optional: Specify the services or configurations needed
 services:
