@@ -1,3 +1,7 @@
 selenium
 beautifulsoup4
 requests
+mailersend
+redis
+flask
+gunicorn
