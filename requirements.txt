@@ -5,3 +5,4 @@ mailersend
 redis
 flask
 gunicorn
+tenacity

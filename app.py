@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import threading
 import requests
 import redis
 from flask import Flask, jsonify
@@ -10,6 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 from mailersend import emails
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 app = Flask(__name__)
 
@@ -36,7 +38,7 @@ def fetch_webpage(url):
                 EC.element_to_be_clickable((By.LINK_TEXT, "Show More"))
             )
             show_more_button.click()
-            time.sleep(0.5)
+            time.sleep(2)
         except Exception:
             break
 
@@ -65,20 +67,62 @@ def fetch_job_titles(links):
             map_title_link[title] = job
     return map_title_link
 
+
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+def safe_hgetall(client, key):
+    return client.hgetall(key)
+
+
 def update_jobs_in_redis(web_fetched_jobs):
-    old_redis_jobs = redis_client.hgetall("old_redis_jobs")
-    old_redis_jobs = {key.decode('utf-8'): value.decode('utf-8') for key, value in old_redis_jobs.items()}
-    new_jobs = {key: web_fetched_jobs[key] for key in web_fetched_jobs if key not in old_redis_jobs}
+    try:
+        # Fetch old jobs with retry logic
+        old_redis_jobs = safe_hgetall(redis_client, "old_redis_jobs")
+        if not old_redis_jobs:
+            print("Warning: No old jobs found in Redis.")
+            old_redis_jobs = {}
+            return old_redis_jobs
 
-    jobs_removed = [key for key in old_redis_jobs if key not in web_fetched_jobs]
+        old_redis_jobs = {key.decode('utf-8'): value.decode('utf-8') for key, value in old_redis_jobs.items()}
+        new_jobs = {}
+        for key in web_fetched_jobs:
+            if key not in old_redis_jobs:
+                new_jobs[key]= web_fetched_jobs[key]
+        
+        # Remove keys from old_redis_jobs that are not in web_fetched_jobs
+        jobs_removed = []
+        for key in old_redis_jobs:
+            if key not in web_fetched_jobs:
+                jobs_removed.append(key)
 
-    if new_jobs:
-        redis_client.hset("all_jobs", mapping=new_jobs)
-        redis_client.hset("old_redis_jobs", mapping=new_jobs)
-    if jobs_removed:
-        redis_client.hdel("old_redis_jobs", *jobs_removed)
+        if new_jobs:
+            redis_client.hset("all_jobs", mapping=new_jobs)
+            redis_client.hset("old_redis_jobs", mapping=new_jobs)
+            print("New jobs found and added to Redis:")
+            for title, link in new_jobs.items():
+                print(f"{title}: {link}")
+        else:
+            print("No new jobs found.")
+
+        if (len(jobs_removed)>7):
+            return new_jobs
+
+        if jobs_removed:
+            redis_client.hdel("old_redis_jobs", *jobs_removed)
+            print("Jobs removed from old_redis_jobs in Redis:", jobs_removed)
+        else:
+            print("No old jobs were removed.")
+
+        return new_jobs
     
-    return new_jobs
+    except redis.exceptions.ConnectionError as e:
+        print(f"Redis connection error: {e}")
+        return {}
+    except redis.exceptions.TimeoutError as e:
+        print(f"Redis timeout error: {e}")
+        return {}
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return {}
 
 def sendmail(new_jobs):
     api_key = os.getenv('MAILER_API_KEY')
@@ -114,17 +158,34 @@ def sendmail(new_jobs):
     else:
         print("Emails may not have sent. Response was: ", response.status_code)
 
+
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+def fetch_url_with_retry(url, timeout=10):
+    response = requests.get(url, timeout=timeout)
+    response.raise_for_status()  # Raise an HTTPError if the response was unsuccessful
+    return response
+
+
 @app.route('/trigger', methods=['GET'])
 def trigger_script():
     try:
         url = "https://www.headout.com/careers/"
 
+        try:
+            response = fetch_url_with_retry(url)
+        except requests.exceptions.RequestException as e:
+            print(f"Failed to fetch the webpage: {e}")
+            return jsonify({"error": "Headout careers website is not accessible."}), 503
+ 
+        
         print("fetching all jobs links")
         webpage = fetch_webpage(url)
-        current_title_link = fetch_job_titles(parse_jobs(webpage))
+        map_web_fetched_jobs = fetch_job_titles(parse_jobs(webpage))
+        if(len(map_web_fetched_jobs)<=0):
+            return jsonify({"error": "Headout careers website is not accessible."}), 503
 
         print("updating redis")                                             # redis interaction
-        new_jobs = update_jobs_in_redis(current_title_link)
+        new_jobs = update_jobs_in_redis(map_web_fetched_jobs)
         if (len(new_jobs)>0):
             print("Now trying to send mails for new job openings.")
             sendmail(new_jobs)
