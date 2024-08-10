@@ -168,30 +168,38 @@ def fetch_url_with_retry(url, timeout=10):
 
 @app.route('/trigger', methods=['GET'])
 def trigger_script():
-    try:
-        url = "https://www.headout.com/careers/"
-
+    def background_task():
         try:
-            response = fetch_url_with_retry(url)
-        except requests.exceptions.RequestException as e:
-            print(f"Failed to fetch the webpage: {e}")
-            return jsonify({"error": "Headout careers website is not accessible."}), 503
- 
-        
-        print("fetching all jobs links")
-        webpage = fetch_webpage(url)
-        map_web_fetched_jobs = fetch_job_titles(parse_jobs(webpage))
-        if(len(map_web_fetched_jobs)<=0):
-            return jsonify({"error": "Headout careers website is not accessible."}), 503
+            url = "https://www.headout.com/careers/"
 
-        print("updating redis")                                             # redis interaction
-        new_jobs = update_jobs_in_redis(map_web_fetched_jobs)
-        if (len(new_jobs)>0):
-            print("Now trying to send mails for new job openings.")
-            sendmail(new_jobs)
-        return jsonify({"status": "success", "message": "Script executed successfully."}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+            try:
+                response = fetch_url_with_retry(url)
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to fetch the webpage: {e}")
+                return
+            
+            print("fetching all jobs links")
+            webpage = fetch_webpage(url)
+            map_web_fetched_jobs = fetch_job_titles(parse_jobs(webpage))
+            if len(map_web_fetched_jobs) <= 0:
+                print("Headout careers website is not accessible.")
+                return
+
+            print("updating redis")
+            new_jobs = update_jobs_in_redis(map_web_fetched_jobs)
+            if len(new_jobs) > 0:
+                print("Now trying to send mails for new job openings.")
+                sendmail(new_jobs)
+            print("Script executed successfully.")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+    # Start the background task in a new thread
+    thread = threading.Thread(target=background_task)
+    thread.start()
+
+    # Return a success response immediately
+    return jsonify({"status": "success", "message": "Script execution started."}), 200
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=10000)
